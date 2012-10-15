@@ -634,19 +634,19 @@ module CASServer
 
     # 2.5.1
     get "#{uri_path}/serviceValidate" do
-			CASServer::Utils::log_controller_action(self.class, params)
-
-			# required
-			@service = clean_service_url(params['service'])
-			@ticket = params['ticket']
-			# optional
-			@pgt_url = params['pgtUrl']
-			@renew = params['renew']
-
-			st, @error = validate_service_ticket(@service, @ticket)
-			@success = st && !@error
-
-			if @success
+      CASServer::Utils::log_controller_action(self.class, params)
+      
+      # required
+      @service = clean_service_url(params['service'])
+      @ticket = params['ticket']
+      # optional
+      @pgt_url = params['pgtUrl']
+      @renew = params['renew']
+      
+      st, @error = validate_service_ticket(@service, @ticket)
+      @success = st && !@error
+      
+      if @success
         @username = st.username
         if @pgt_url
           pgt = generate_proxy_granting_ticket(@pgt_url, st)
@@ -654,11 +654,10 @@ module CASServer
         end
         @extra_attributes = st.granted_by_tgt.extra_attributes || {}
       end
-
+      
       status response_status_from_error(@error) if @error
-
-			render :builder, :proxy_validate
-		end
+      render :builder, :proxy_validate
+    end
   
     
     # 2.6
