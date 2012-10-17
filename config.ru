@@ -1,5 +1,5 @@
 require 'rubygems'
-require 'bundler/setup'
+#require 'bundler/setup'
 
 $:.unshift "#{File.dirname(__FILE__)}/lib"
 require "casserver"

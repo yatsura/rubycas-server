@@ -11,6 +11,7 @@ port: 6543
 #   password: 
 #   host: localhost
 #   reconnect: true
+
 database:
  adapter: sqlite3
  database: spec/casserver_spec.db

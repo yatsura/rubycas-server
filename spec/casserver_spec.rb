@@ -1,11 +1,9 @@
 # encoding: UTF-8
+
 require File.dirname(__FILE__) + '/spec_helper'
+require 'pry'
 
 $LOG = Logger.new(File.basename(__FILE__).gsub('.rb','.log'))
-
-RSpec.configure do |config|
-  config.include Capybara::DSL
-end
 
 VALID_USERNAME = 'spec_user'
 VALID_PASSWORD = 'spec_password'
@@ -13,17 +11,28 @@ VALID_PASSWORD = 'spec_password'
 ATTACK_USERNAME = '%3E%22%27%3E%3Cscript%3Ealert%2826%29%3C%2Fscript%3E&password=%3E%22%27%3E%3Cscript%3Ealert%2826%29%3C%2Fscript%3E&lt=%3E%22%27%3E%3Cscript%3Ealert%2826%29%3C%2Fscript%3E&service=%3E%22%27%3E%3Cscript%3Ealert%2826%29%3C%2Fscript%3E'
 INVALID_PASSWORD = 'invalid_password'
 
+app = <<-END
+    application:
+      root: #{File.dirname(__FILE__)}/..
+    web:
+      rackup: #{File.dirname(__FILE__)}/../config.ru
+      context: /cas
+    environment:
+      CONFIG_FILE: #{File.dirname(__FILE__)}/default_config_java.yml
+    ruby:
+      version: 1.9
+      interactive: true
+  END
+
 describe 'CASServer' do
 
+  deploy(app)
+
   before do
-    @target_service = 'http://my.app.test'
+    @target_service = 'http://my.test.service'
   end
 
   describe "/login" do
-    before do
-      load_server(File.dirname(__FILE__) + "/default_config.yml")
-      reset_spec_database
-    end
 
     it "logs in successfully with valid username and password without a target service" do
       visit "/login"
@@ -44,6 +53,18 @@ describe 'CASServer' do
       page.should have_content("Incorrect username or password")
     end
 
+    it "preserves target service after invalid login" do
+      visit "/login?service="+CGI.escape(@target_service)
+      binding.pry
+
+      fill_in 'username', :with => VALID_USERNAME
+      fill_in 'password', :with => INVALID_PASSWORD
+      click_button 'login-submit'
+
+      page.should have_content("Incorrect username or password")
+      page.should have_xpath('//input[@id="service"]', :value => @target_service)
+    end
+
     it "logs in successfully with valid username and password and redirects to target service" do
       visit "/login?service="+CGI.escape(@target_service)
 
@@ -53,17 +74,6 @@ describe 'CASServer' do
       click_button 'login-submit'
 
       page.current_url.should =~ /^#{Regexp.escape(@target_service)}\/?\?ticket=ST\-[1-9rA-Z]+/
-    end
-
-    it "preserves target service after invalid login" do
-      visit "/login?service="+CGI.escape(@target_service)
-
-      fill_in 'username', :with => VALID_USERNAME
-      fill_in 'password', :with => INVALID_PASSWORD
-      click_button 'login-submit'
-
-      page.should have_content("Incorrect username or password")
-      page.should have_xpath('//input[@id="service"]', :value => @target_service)
     end
 
     it "uses appropriate localization based on Accept-Language header" do
@@ -95,9 +105,10 @@ describe 'CASServer' do
 
 
   describe '/logout' do
+    deploy(app)
 
     before do
-      load_server(File.dirname(__FILE__) + "/default_config.yml")
+#      load_server(config_file_name)
       reset_spec_database
     end
 
@@ -116,8 +127,10 @@ describe 'CASServer' do
   end # describe '/logout'
 
   describe 'Configuration' do
+    deploy(app)
+
     it "uri_path value changes prefix of routes" do
-      load_server(File.dirname(__FILE__) + "/alt_config.yml")
+#      load_server(config_file_name(:alt))
       @target_service = 'http://my.app.test'
 
       visit "/test/login"
@@ -129,8 +142,10 @@ describe 'CASServer' do
   end
 
   describe "proxyValidate" do
+    deploy(app)
+
     before do
-      load_server(File.dirname(__FILE__) + "/default_config.yml")
+      load_server(config_file_name)
       reset_spec_database
 
       visit "/login?service="+CGI.escape(@target_service)
@@ -148,9 +163,11 @@ describe 'CASServer' do
       visit "/serviceValidate?service=#{CGI.escape(@target_service)}&ticket=#{@ticket}"
 
       encoded_utf_string = "&#1070;&#1090;&#1092;" # actual string is "Ютф"
-      page.body.should match("<test_utf_string>#{encoded_utf_string}</test_utf_string>")
+      
+      # If it's UTF-8 then it's supported!
+      page.body.should match("<test_utf_string>Ютф</test_utf_string>")
       page.body.should match("<test_numeric>123.45</test_numeric>")
-      page.body.should match("<test_utf_string>&#1070;&#1090;&#1092;</test_utf_string>")
+#      page.body.should match("<test_utf_string>&#1070;&#1090;&#1092;</test_utf_string>")
     end
   end
 end

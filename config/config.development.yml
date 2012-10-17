@@ -1,0 +1,31 @@
+my_path: /cas
+#database:
+#  adapter: jdbc
+#  username: casserver
+#  password: FejEphelvOd8
+#  driver: com.mysql.jdbc.Driver
+#  url: jdbc:mysql://localhost:3306/casserver
+#  reconnect: true
+database:
+ adapter: jdbcsqlite3
+ database: /home/pmitche2/development/ruby/sinatra/rubycas-server/development/db/casserver.db
+  
+authenticator:
+  -
+    class: CASServer::Authenticators::LDAP
+    ldap:
+      host: localhost
+      port: 389
+      base: ou=people,dc=prv,dc=ecmc,dc=ed,dc=ac,dc=uk
+      username_attribute: mail
+      filter: (objectClass=inetOrgPerson)
+    extra_attributes: cn, uid
+
+theme: ecmc
+organization: ECMC
+infoline: Powered by <a href="http://code.google.com/p/rubycas-server/">RubyCAS-Server</a> and <a href="http://torquebox.org">TorqueBox</a> 
+enable_single_sign_out: true
+log:
+  level: DEBUG
+  file: '/home/pmitche2/development/ruby/sinatra/rubycas-server/development/log/casserver.log'
+default_locale: en
