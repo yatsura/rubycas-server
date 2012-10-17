@@ -3,9 +3,6 @@ require 'casserver/localization'
 require 'casserver/utils'
 require 'casserver/cas'
 
-require 'logger'
-$LOG ||= Logger.new(STDOUT)
-
 module CASServer
   class Server < Sinatra::Base
     if ENV['CONFIG_FILE']
@@ -15,7 +12,7 @@ module CASServer
     else
       CONFIG_FILE = "/etc/rubycas-server/config.yml"
     end
-    
+
     include CASServer::CAS # CAS protocol helpers
     include Localization
 
@@ -88,52 +85,20 @@ module CASServer
     end
     
     def self.print_cli_message(msg, type = :info)
-      if respond_to?(:config) && config && config[:quiet]
-        return
-      end
-      
-      if type == :error
-        io = $stderr
-        prefix = "!!! "
-      else
-        io = $stdout
-        prefix = ">>> "
-      end
-      
-      io.puts
-      io.puts "#{prefix}#{msg}"
-      io.puts
+      $LOG.error("print_cli_message called with: #{msg}")
     end
 
     def self.load_config_file(config_file)
       begin
         config_file = File.open(config_file)
       rescue Errno::ENOENT => e
-        
-        print_cli_message "Config file #{config_file} does not exist!", :error
-        print_cli_message "Would you like the default config file copied to #{config_file.inspect}? [y/N]"
-        if gets.strip.downcase == 'y'
-          require 'fileutils'
-          default_config = File.dirname(__FILE__) + '/../../config/config.example.yml'
-          
-          if !File.exists?(File.dirname(config_file))
-            print_cli_message "Creating config directory..."
-            FileUtils.mkdir_p(File.dirname(config_file), :verbose => true)
-          end
-          
-          print_cli_message "Copying #{default_config.inspect} to #{config_file.inspect}..."
-          FileUtils.cp(default_config, config_file, :verbose => true)
-          print_cli_message "The default config has been copied. You should now edit it and try starting again."
-          exit
-        else
-          print_cli_message "Cannot start RubyCAS-Server without a valid config file.", :error
-          raise e
-        end
+        $LOG.error "Could get config file: #{config_file}"
+        raise e
       rescue Errno::EACCES => e
-        print_cli_message "Config file #{config_file.inspect} is not readable (permission denied)!", :error
+        $LOG.error "Config file #{config_file.inspect} is not readable (permission denied)!"
         raise e
       rescue => e
-        print_cli_message "Config file #{config_file.inspect} could not be read!", :error
+        $LOG.error "Config file #{config_file.inspect} could not be read!"
         raise e
       end
       
@@ -160,51 +125,20 @@ module CASServer
     end
 
     def self.handler_ssl_options
-      return {} unless config[:ssl_cert]
-
-      cert_path = config[:ssl_cert]
-      key_path = config[:ssl_key] || config[:ssl_cert]
-      
-      unless cert_path.nil? && key_path.nil?
-        raise "The ssl_cert and ssl_key options cannot be used with mongrel. You will have to run your " +
-          " server behind a reverse proxy if you want SSL under mongrel." if
-            config[:server] == 'mongrel'
-
-        raise "The specified certificate file #{cert_path.inspect} does not exist or is not readable. " +
-          " Your 'ssl_cert' configuration setting must be a path to a valid " +
-          " ssl certificate." unless
-            File.exists? cert_path
-
-        raise "The specified key file #{key_path.inspect} does not exist or is not readable. " +
-          " Your 'ssl_key' configuration setting must be a path to a valid " +
-          " ssl private key." unless
-            File.exists? key_path
-
-        require 'openssl'
-        require 'webrick/https'
-
-        cert = OpenSSL::X509::Certificate.new(File.read(cert_path))
-        key = OpenSSL::PKey::RSA.new(File.read(key_path))
-
-        {
-          :SSLEnable        => true,
-          :SSLVerifyClient  => ::OpenSSL::SSL::VERIFY_NONE,
-          :SSLCertificate   => cert,
-          :SSLPrivateKey    => key
-        }
-      end
+      $LOG.info "handler_ssl_options called, N/A for TB"
     end
 
     def self.init_authenticators!
       auth = []
       
       if config[:authenticator].nil?
-        print_cli_message "No authenticators have been configured. Please double-check your config file (#{CONFIG_FILE.inspect}).", :error
-        exit 1
+        $LOG.info "No authenticators have been configured. Please double-check your config file (#{CONFIG_FILE.inspect})."
+        exit 1 # TODO TB exit, possible throw exception
       end
       
       begin
         # attempt to instantiate the authenticator
+        # TODO Understand LDAP authentication better, doesn't support backups
         config[:authenticator] = [config[:authenticator]] unless config[:authenticator].instance_of? Array
         config[:authenticator].each { |authenticator| auth << authenticator[:class].constantize}
       rescue NameError
@@ -246,36 +180,19 @@ module CASServer
     end
 
     def self.init_logger!
-      if config[:log]
-        if $LOG && config[:log][:file]
-          print_cli_message "Redirecting RubyCAS-Server log to #{config[:log][:file]}"
-          #$LOG.close
-          $LOG = Logger.new(config[:log][:file])
-        end
-        $LOG.level = Logger.const_get(config[:log][:level]) if config[:log][:level]
-      end
-      
-      if config[:db_log]
-        if $LOG && config[:db_log][:file]
-          $LOG.debug "Redirecting ActiveRecord log to #{config[:log][:file]}"
-          #$LOG.close
-          ActiveRecord::Base.logger = Logger.new(config[:db_log][:file])
-        end
-        ActiveRecord::Base.logger.level = Logger.const_get(config[:db_log][:level]) if config[:db_log][:level]
-      end
+      # Logging via Log4J
     end
 
     def self.init_database!
-
       unless config[:disable_auto_migrations]
         ActiveRecord::Base.establish_connection(config[:database])
-        print_cli_message "Running migrations to make sure your database schema is up to date..."
+        $LOG.info "Running migrations to make sure your database schema is up to date..."
         prev_db_log = ActiveRecord::Base.logger
-        ActiveRecord::Base.logger = Logger.new(STDOUT)
+        ActiveRecord::Base.logger = $LOG
         ActiveRecord::Migration.verbose = true
         ActiveRecord::Migrator.migrate(File.dirname(__FILE__) + "/../../db/migrate")
         ActiveRecord::Base.logger = prev_db_log
-        print_cli_message "Your database is now up to date."
+        $LOG.info "Your database is now up to date."
       end
       
       ActiveRecord::Base.establish_connection(config[:database])
@@ -607,27 +524,27 @@ module CASServer
     end
 
 
-		# 2.4
+    # 2.4
 
-		# 2.4.1
-		get "#{uri_path}/validate" do
-			CASServer::Utils::log_controller_action(self.class, params)
-			
-			# required
-			@service = clean_service_url(params['service'])
-			@ticket = params['ticket']
-			# optional
-			@renew = params['renew']
-			
-			st, @error = validate_service_ticket(@service, @ticket)      
-			@success = st && !@error
-			
-			@username = st.username if @success
-			
+    # 2.4.1
+    get "#{uri_path}/validate" do
+      CASServer::Utils::log_controller_action(self.class, params)
+      
+      # required
+      @service = clean_service_url(params['service'])
+      @ticket = params['ticket']
+      # optional
+      @renew = params['renew']
+      
+      st, @error = validate_service_ticket(@service, @ticket)      
+      @success = st && !@error
+      
+      @username = st.username if @success
+      
       status response_status_from_error(@error) if @error
-			
-			render @template_engine, :validate, :layout => false
-		end
+      
+      render @template_engine, :validate, :layout => false
+    end
 
 
     # 2.5
@@ -699,7 +616,6 @@ module CASServer
      render :builder, :proxy_validate
     end
 
-
     # 2.7
     get "#{uri_path}/proxy" do
       CASServer::Utils::log_controller_action(self.class, params)
@@ -720,10 +636,7 @@ module CASServer
       render :builder, :proxy
     end
 
-
-
     # Helpers
-
     def response_status_from_error(error)
       case error.code.to_s
       when /^INVALID_/, 'BAD_PGT'

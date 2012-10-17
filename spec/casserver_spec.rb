@@ -1,7 +1,6 @@
 # encoding: UTF-8
 
 require File.dirname(__FILE__) + '/spec_helper'
-require 'pry'
 
 $LOG = Logger.new(File.basename(__FILE__).gsub('.rb','.log'))
 
@@ -55,7 +54,6 @@ describe 'CASServer' do
 
     it "preserves target service after invalid login" do
       visit "/login?service="+CGI.escape(@target_service)
-      binding.pry
 
       fill_in 'username', :with => VALID_USERNAME
       fill_in 'password', :with => INVALID_PASSWORD

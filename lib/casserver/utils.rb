@@ -14,8 +14,6 @@ module CASServer
     module_function :random_string
 
     def log_controller_action(controller, params)
-      $LOG << "\n"
-
       /`(.*)'/.match(caller[1])
       method = $~[1]
 
